@@ -46,3 +46,91 @@ func init() {
         return
     }
 }
+
+// reads the llgin credentials, checks them and creates JWT
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+  var user User
+  //decode into User struct
+  err := json.NewDecoder(r.Body).Decode(&user)
+  if err != nil {
+      w.WriteHeader(http.StatusInternalServerError)
+      fmt.Fprintln(w, "Error in request body")
+      return
+  }
+  // validate user credentials
+  if user.UserName != "user" && user.Password != "pass" {
+      w.WriteHeader(http.StatusForbidden)
+      fmt.Fprintln(w, "Wrong info")
+      return
+  }
+
+  // create a signer for rsa 256
+  t := jwt.New(jwt.GetSigningMethod("RS256"))
+
+  // set our claims
+  t.Claims["iss"] = "admin"
+  t.Claims["CustomUserInfo"] = struct {
+      Name string
+      Role string
+  }{user.UserName, "Member"}
+
+  // set the expire time
+  t.Claims["exp"] = time.Now().Add(time.Minute * 20).Unix()
+  tokenString, err := t.SignedString(signKey)
+  if err != nil {
+      w.WriteHeader(http.StatusInternalServerError)
+      fmt.Fprintln(w, "Sorry, error while Signing Token!")
+      log.Printf("Token Signing error: %v\n", err)
+      return
+  }
+  response := Token{tokenString}
+  jsonResponse(response, w)
+}
+
+// only accessible with a valid tokenString
+func authHandler(w http.ResponseWriter, r *http.Request) {
+    // validate the token
+    token, err := jwt.ParseFromRequest(r, func(token *jwt.Token) (interface{}, error) {
+        // since only use one private key to sign the tokens,
+        // also only use its public counterpart to verify
+        return verifyKey, nil
+    })
+
+    if err != nil {
+        switch err.(type) {
+
+        case *jwt.ValidationError: // something was wrong during the validation
+            vErr := err.(*jwt.ValidationError)
+
+            switch vErr.Errors {
+            case jwt.ValidationErrorExpired:
+              w.WriteHeader(http.StatusUnauthorized)
+              fmt.Fprintln(w, "Token Expired, get a new one.")
+              return
+
+            default:
+              w.WriteHeader(http.StatusInternalServerError)
+              fmt.Fprintln(w, "Error while Parsing Token!")
+              log.Printf("ValidationError error: %+v\n", vErr.Errors)
+              return
+            }
+
+          default: // something else went wrong
+            w.WriteHeader(http.StatusInternalServerError)
+            fmt.Fprintln(w, "Error while Parsing Token!")
+            log.Printf("Token parse error: %v\n", err)
+            return
+        }
+    }
+    if token.Valid {
+      response := Response{"Authorized to the system"}
+      jsonResponse(response, w)
+    } else {
+      response := Response{"Invalid token"}
+      jsonResponse(response, w)
+    }
+}
+
+type Response struct {
+  
+}
