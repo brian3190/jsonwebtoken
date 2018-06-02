@@ -26,8 +26,8 @@ var (
 
 //struct User for parsing login credentials
 type User struct {
-    UserName string 'json:"username"'
-    Password string 'json:"password"'
+    UserName string "json:'username'";
+    Password string "json:'password'"
 }
 
 // read the key files before starting http handlers
@@ -132,5 +132,35 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type Response struct {
-  
+  Text string "json:'test'"
+}
+type Token struct {
+  Token string "json:'token'"
+}
+
+func jsonResponse(response interface{}, w http.ResponseWriter) {
+  json, err := json.Marshal(response)
+  if err != nil {
+    http.Error(w, err.Error(), http.StatusInternalServerError)
+    return
+  }
+
+  w.WriteHeader(http.StatusOK)
+  w.Header().Set("Content-Type", "application/json")
+  w.Write(json)
+}
+
+//Entry point of the program
+func main() {
+
+  r := mux.NewRouter()
+  r.HandleFunc("/login", loginHandler).Methods("POST")
+  r.HandleFunc("/auth", authHandler).Methods("POST")
+
+  server := &http.Server{
+    Addr: ":8080",
+    Handler: r,
+  }
+  log.Println("Listening...")
+  server.ListenAndServe()
 }
